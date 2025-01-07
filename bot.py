@@ -30,13 +30,76 @@ async def gpt(update, context):
 async def gpt_dialog(update, context):
     text = update.message.text
     prompt = load_message('gpt')
-    answer = await char_gpt.send_question(prompt, text)
+    answer = await chat_gpt.send_question(prompt, text)
     await send_text(update, context, answer)
+
+
+async def date(update, context):
+    dialog.mode = 'date'
+    text = load_message('date')
+    await send_photo(update, context, 'date')
+    await send_text_buttons(update, context, text, {
+        'date_grande': 'Ариана Гранде',
+        'date_robbie': 'Марго Робби',
+        'date_zendaya': 'Зендея',
+        'date_gosling': 'Райан Гослинг',
+        'date_hardy': 'Том Харди',
+    })
+
+
+async def date_dialog(update, context):
+    text = update.message.text
+    my_message = await send_text(update, context, 'Девушка набирает сообщение...')
+    answer = await chat_gpt.add_message(text)
+    await my_message.edit_text(answer)
+
+
+async def date_button(update, context):
+    query = update.callback_query.data
+    await update.callback_query.answer()
+
+    await send_photo(update, context, query)
+    await send_html(update, context, 'Отличный выбор! Пригласите девушку '
+                                     '(парня) на свидание за пять сообщений')
+
+    prompt = load_prompt(query)
+    chat_gpt.set_prompt(prompt)
+
+
+async def message(update, context):
+    dialog.mode = 'message'
+    text = load_message('message')
+    await send_photo(update, context, 'message')
+    await send_text_buttons(update, context, text, {
+        'message_next': 'Следующее сообщение',
+        'message_date': 'Пригласить на свидание',
+    })
+    dialog.list.clear()
+
+
+async def message_button(update, context):
+    query = update.callback_query.data
+    await update.callback_query.answer()
+
+    prompt = load_prompt(query)
+    user_chat_history = '\n\n'.join(dialog.list)
+    my_message = await send_text(update, context, 'ChatGPT думает над ответом...')
+    answer = await chat_gpt.send_question(prompt, user_chat_history)
+    await my_message.edit_text(answer)
+
+
+async def message_dialog(update, context):
+    text = update.message.text
+    dialog.list.append(text)
 
 
 async def hello(update, context):
     if dialog.mode == 'gpt':
         await gpt_dialog(update, context)
+    elif dialog.mode == 'date':
+        await date_dialog(update, context)
+    elif dialog.mode == 'message':
+        await message_dialog(update, context)
     else:
         await send_text(update, context, '*привет, привет!*')
         await send_text(update, context, '_как дела?_')
@@ -59,11 +122,20 @@ async def hello_button(update, context):
 
 dialog = Dialog()
 dialog.mode = None
-char_gpt = ChatGptService(token=OPEN_AI_TOKEN)
+dialog.list = []
+
+chat_gpt = ChatGptService(token=OPEN_AI_TOKEN)
 
 app = ApplicationBuilder().token(TG_BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, hello))
+
 app.add_handler(CommandHandler('start', start))
 app.add_handler(CommandHandler('gpt', gpt))
+app.add_handler(CommandHandler('date', date))
+app.add_handler(CommandHandler('message', message))
+
+app.add_handler(CallbackQueryHandler(date_button, pattern='^date_.*'))
+app.add_handler(CallbackQueryHandler(message_button, pattern='^message_.*'))
 app.add_handler(CallbackQueryHandler(hello_button))
+
 app.run_polling()
